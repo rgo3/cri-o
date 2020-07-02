@@ -25,9 +25,18 @@ require (
 	github.com/docker/distribution v2.7.1+incompatible
 	github.com/docker/go-units v0.4.0
 	github.com/emicklei/go-restful v2.9.5+incompatible
+	github.com/firecracker-microvm/firecracker-go-sdk v0.21.0
 	github.com/fsnotify/fsnotify v1.4.9
+	github.com/go-openapi/errors v0.19.4 // indirect
+	github.com/go-openapi/loads v0.19.5 // indirect
+	github.com/go-openapi/runtime v0.19.15
+	github.com/go-openapi/spec v0.19.8 // indirect
+	github.com/go-openapi/strfmt v0.19.5
+	github.com/go-openapi/swag v0.19.9 // indirect
+	github.com/go-openapi/validate v0.19.8 // indirect
 	github.com/go-zoo/bone v1.3.0
 	github.com/godbus/dbus/v5 v5.0.3
+	github.com/gofrs/uuid v3.3.0+incompatible // indirect
 	github.com/gogo/protobuf v1.3.1
 	github.com/golang/mock v1.4.4
 	github.com/google/renameio v0.1.0
