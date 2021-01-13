@@ -1,4 +1,4 @@
- package oci
+package oci
 
 import (
 	"context"
@@ -28,6 +28,8 @@ const (
 
 	fcTimeout         = 10
 	defaultConfigPath = "/etc/crio/firecracker-crio.json"
+
+	SetupUnikernelArgsHandlerName = "fcinit.SetupUnikernelArgs"
 )
 
 type FcConfig struct {
@@ -36,6 +38,7 @@ type FcConfig struct {
 	KernelImagePath       string `json:"kernel_image_path"`
 	KernelArgs            string `json:"kernel_args"`
 	RootDrive             string `json:"root_drive"`
+	Unikernel             string `json:"unikernel"`
 }
 
 func LoadConfig(path string) (*FcConfig, error) {
@@ -68,6 +71,53 @@ type runtimeFC struct {
 	config   *FcConfig
 }
 
+// SetupUnikernelArgsHandler setups up the kernel arguments for OSv unikernels
+var SetupUnikernelArgsHandler = firecracker.Handler{
+	Name: SetupUnikernelArgsHandlerName,
+	Fn: func(ctx context.Context, m *firecracker.Machine) error {
+		return setupUnikernelArgs(m)
+	},
+}
+
+func setupUnikernelArgs(m *firecracker.Machine) error {
+
+	kernelArgs := m.Cfg.KernelArgs
+
+	// If any network interfaces have a static IP configured, we need to set the netowrking boot flags for OSv.
+	cni := m.Cfg.NetworkInterfaces[0]
+	if cni.StaticConfiguration != nil && cni.StaticConfiguration.IPConfiguration != nil {
+		staticIPInterface := cni.StaticConfiguration.IPConfiguration
+		// configure OSv networking kernel args
+		clientIP := staticIPInterface.IPAddr.IP.String()
+
+		// default gateway for the network; used to generate a corresponding route table entry
+		defaultGateway := staticIPInterface.Gateway.String()
+
+		// subnet mask used to generate a corresponding route table entry for the primary interface
+		// (must be provided in dotted decimal notation)
+		subnetMask := fmt.Sprintf("%d.%d.%d.%d",
+			staticIPInterface.IPAddr.Mask[0],
+			staticIPInterface.IPAddr.Mask[1],
+			staticIPInterface.IPAddr.Mask[2],
+			staticIPInterface.IPAddr.Mask[3],
+		)
+
+		netArgs := fmt.Sprintf("--ip=eth0,%s,%s --defaultgw=%s --nameserver=%s",
+			clientIP,
+			subnetMask,
+			defaultGateway,
+			defaultGateway,
+		)
+		kernelArgs = fmt.Sprintf("%s %s",
+			netArgs,
+			kernelArgs,
+		)
+	}
+
+	m.Cfg.KernelArgs = kernelArgs
+	return nil
+}
+
 // newRuntimeFC creates a new runtimeFC instance
 func newRuntimeFC(path string) RuntimeImpl {
 	config, err := LoadConfig(defaultConfigPath)
@@ -83,7 +133,7 @@ func newRuntimeFC(path string) RuntimeImpl {
 
 // Version returns the version of the OCI Runtime
 func (r *runtimeFC) Version() (string, error) {
-	return "vm", nil
+	return "fc", nil
 }
 
 func (r *runtimeFC) newFireClient() *fclient.Firecracker {
@@ -228,6 +278,16 @@ func (r *runtimeFC) startVM() error {
 	r.machine, errMach = firecracker.NewMachine(r.ctx, fcCfg, firecracker.WithProcessRunner(cmdBuilder))
 	if errMach != nil {
 		return errMach
+	}
+
+	// handle Unikernels specificly for kernel arguments
+	r.machine.Logger().Debugf("Unikernel: %s", r.config.Unikernel)
+	if r.config.Unikernel == "true" {
+		r.machine.Logger().Debugf("Modifying handlers to setup unikernels")
+		// remove kernelargshandler
+		r.machine.Handlers.FcInit = r.machine.Handlers.FcInit.Remove(firecracker.SetupKernelArgsHandler.Name)
+		// add unikernelargshandler after network setup handler so static IP interface is configured on VM
+		r.machine.Handlers.FcInit = r.machine.Handlers.FcInit.AppendAfter(firecracker.SetupNetworkHandler.Name, SetupUnikernelArgsHandler)
 	}
 
 	if err := r.machine.Start(r.ctx); err != nil {
