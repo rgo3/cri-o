@@ -301,7 +301,7 @@ func (r *Runtime) CreateContainer(c *Container, cgroupParent string) error {
 	}
 	defer f.Close()
 
-	f.WriteString(c.Name() + ":" + time.Now().String())
+	f.WriteString(c.Name() + ":" + time.Now().String() + "\n")
 
 	return impl.CreateContainer(c, cgroupParent)
 }
