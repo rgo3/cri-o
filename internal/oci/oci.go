@@ -295,7 +295,7 @@ func (r *Runtime) CreateContainer(c *Container, cgroupParent string) error {
 	r.runtimeImplMap[c.ID()] = impl
 	r.runtimeImplMapMutex.Unlock()
 
-	f, err := os.OpenFile("/home/rgo/creation_times.txt", os.O_RDWR|os.O_CREATE, 0755)
+	f, err := os.OpenFile("/home/rgo/creation_times.txt", os.O_RDWR|os.O_APPEND|os.O_CREATE, 0755)
 	if err != nil {
 		return err
 	}
