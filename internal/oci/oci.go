@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"sync"
 	"syscall"
 	"time"
@@ -293,6 +294,14 @@ func (r *Runtime) CreateContainer(c *Container, cgroupParent string) error {
 	r.runtimeImplMapMutex.Lock()
 	r.runtimeImplMap[c.ID()] = impl
 	r.runtimeImplMapMutex.Unlock()
+
+	f, err := os.OpenFile("/home/rgo/creation_times.txt", os.O_RDWR|os.O_CREATE, 0755)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	f.WriteString(c.Name() + ":" + time.Now().String())
 
 	return impl.CreateContainer(c, cgroupParent)
 }
