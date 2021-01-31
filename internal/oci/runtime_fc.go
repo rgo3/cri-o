@@ -228,7 +228,7 @@ func (r *runtimeFC) CreateContainer(c *Container, cgroupParent string) (err erro
 	return nil
 }
 
-func (r *runtimeFC) startVM() error {
+func (r *runtimeFC) startVM(c *Container) error {
 	logrus.Debug("oci.startVM() start")
 	defer logrus.Debug("oci.startVM() end")
 
@@ -240,7 +240,7 @@ func (r *runtimeFC) startVM() error {
 	fcCfg := firecracker.Config{
 		SocketPath:      r.config.SocketPath,
 		KernelImagePath: r.config.KernelImagePath,
-		KernelArgs:      r.config.KernelArgs,
+		KernelArgs:      fmt.Sprintf("--env=CONTAINERID=%s %s", c.Name(), r.config.KernelArgs),
 		Drives: []fcmodels.Drive{
 			{
 				DriveID:      firecracker.String("rootfs"),
@@ -306,7 +306,7 @@ func (r *runtimeFC) StartContainer(c *Container) error {
 	c.opLock.Lock()
 	defer c.opLock.Unlock()
 
-	if err := r.startVM(); err != nil {
+	if err := r.startVM(c); err != nil {
 		return err
 	}
 
