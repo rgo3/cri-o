@@ -232,13 +232,13 @@ func (r *runtimeFC) startVM(c *Container) error {
 	logrus.Debug("oci.startVM() start")
 	defer logrus.Debug("oci.startVM() end")
 
-	err := r.fcCleanup()
+	err := r.fcCleanup(c)
 	if err != nil {
 		return err
 	}
 
 	fcCfg := firecracker.Config{
-		SocketPath:      r.config.SocketPath,
+		SocketPath:      fmt.Sprintf("%s-%s", c.Name(), r.config.SocketPath),
 		KernelImagePath: r.config.KernelImagePath,
 		KernelArgs:      fmt.Sprintf("--env=CONTAINERID=%s %s", c.Name(), r.config.KernelArgs),
 		Drives: []fcmodels.Drive{
@@ -372,7 +372,7 @@ func (r *runtimeFC) DeleteContainer(c *Container) error {
 	c.opLock.Lock()
 	defer c.opLock.Unlock()
 
-	err := r.fcCleanup()
+	err := r.fcCleanup(c)
 	if err != nil {
 		return err
 	}
@@ -397,10 +397,11 @@ func (r *runtimeFC) DeleteContainer(c *Container) error {
 	return nil
 }
 
-func (r *runtimeFC) fcCleanup() error {
-	logrus.Infof("Cleaning up firecracker socket %s", r.config.SocketPath)
+func (r *runtimeFC) fcCleanup(c *Container) error {
+	socket := fmt.Sprintf("%s-%s", c.Name(), r.config.SocketPath)
+	logrus.Infof("Cleaning up firecracker socket %s", socket)
 
-	cmd := exec.Command("/bin/rm", "-f", r.config.SocketPath)
+	cmd := exec.Command("/bin/rm", "-f", socket)
 	if err := cmd.Start(); err != nil {
 		logrus.Errorf("failed cleaning up firecracker socket: %v", err)
 		return err
