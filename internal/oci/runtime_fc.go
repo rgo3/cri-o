@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -237,8 +238,10 @@ func (r *runtimeFC) startVM(c *Container) error {
 		return err
 	}
 
+	socketFile := fmt.Sprintf("%s-%s", c.Name(), "firecracker.socket")
+
 	fcCfg := firecracker.Config{
-		SocketPath:      fmt.Sprintf("%s-%s", c.Name(), r.config.SocketPath),
+		SocketPath:      filepath.Join(r.config.SocketPath, socketFile),
 		KernelImagePath: r.config.KernelImagePath,
 		KernelArgs:      fmt.Sprintf("--env=CONTAINERID=%s %s", c.Name(), r.config.KernelArgs),
 		Drives: []fcmodels.Drive{
@@ -398,7 +401,8 @@ func (r *runtimeFC) DeleteContainer(c *Container) error {
 }
 
 func (r *runtimeFC) fcCleanup(c *Container) error {
-	socket := fmt.Sprintf("%s-%s", c.Name(), r.config.SocketPath)
+	socketFile := fmt.Sprintf("%s-%s", c.Name(), "firecracker.socket")
+	socket := filepath.Join(r.config.SocketPath, socketFile)
 	logrus.Infof("Cleaning up firecracker socket %s", socket)
 
 	cmd := exec.Command("/bin/rm", "-f", socket)
