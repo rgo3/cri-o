@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"syscall"
@@ -137,12 +138,14 @@ func (r *runtimeFC) Version() (string, error) {
 	return "fc", nil
 }
 
-func (r *runtimeFC) newFireClient() *fclient.Firecracker {
+func (r *runtimeFC) newFireClient(c *Container) *fclient.Firecracker {
 	httpClient := fclient.NewHTTPClient(strfmt.NewFormats())
+
+	socketFile := fmt.Sprintf("%s-%s", c.Name(), "firecracker.socket")
 
 	socketTransport := &http.Transport{
 		DialContext: func(ctx context.Context, network, path string) (net.Conn, error) {
-			addr, err := net.ResolveUnixAddr("unix", r.config.SocketPath)
+			addr, err := net.ResolveUnixAddr("unix", filepath.Join(r.config.SocketPath, socketFile))
 			if err != nil {
 				return nil, err
 			}
@@ -158,11 +161,11 @@ func (r *runtimeFC) newFireClient() *fclient.Firecracker {
 	return httpClient
 }
 
-func (r *runtimeFC) vmRunning() bool {
+func (r *runtimeFC) vmRunning(c *Container) bool {
 	logrus.Debug("oci.vmRunning() start")
 	defer logrus.Debug("oci.vmRunning() end")
 
-	resp, err := r.client().Operations.DescribeInstance(nil)
+	resp, err := r.client(c).Operations.DescribeInstance(nil)
 	if err != nil {
 		return false
 	}
@@ -181,7 +184,7 @@ func (r *runtimeFC) vmRunning() bool {
 }
 
 // waitVMM waits for the VMM to be up and running.
-func (r *runtimeFC) waitVMM(timeout int) error {
+func (r *runtimeFC) waitVMM(c *Container, timeout int) error {
 	logrus.Debug("oci.waitVMM() start")
 	defer logrus.Debug("oci.waitVMM() end")
 
@@ -191,7 +194,7 @@ func (r *runtimeFC) waitVMM(timeout int) error {
 
 	timeStart := time.Now()
 	for {
-		if r.vmRunning() {
+		if r.vmRunning(c) {
 			return nil
 		}
 		if int(time.Since(timeStart).Seconds()) > timeout {
@@ -202,12 +205,12 @@ func (r *runtimeFC) waitVMM(timeout int) error {
 	}
 }
 
-func (r *runtimeFC) client() *fclient.Firecracker {
+func (r *runtimeFC) client(c *Container) *fclient.Firecracker {
 	logrus.Debug("oci.client() start")
 	defer logrus.Debug("oci.client() end")
 
 	if r.fcClient == nil {
-		r.fcClient = r.newFireClient()
+		r.fcClient = r.newFireClient(c)
 	}
 
 	return r.fcClient
@@ -222,7 +225,7 @@ func (r *runtimeFC) CreateContainer(c *Container, cgroupParent string) (err erro
 	c.opLock.Lock()
 	defer c.opLock.Unlock()
 
-	r.fcClient = r.newFireClient()
+	r.fcClient = r.newFireClient(c)
 
 	c.state.Status = ContainerStateCreated
 
@@ -239,9 +242,10 @@ func (r *runtimeFC) startVM(c *Container) error {
 	}
 
 	socketFile := fmt.Sprintf("%s-%s", c.Name(), "firecracker.socket")
+	socket := filepath.Join(r.config.SocketPath, socketFile)
 
 	fcCfg := firecracker.Config{
-		SocketPath:      filepath.Join(r.config.SocketPath, socketFile),
+		SocketPath:      socket,
 		KernelImagePath: r.config.KernelImagePath,
 		KernelArgs:      fmt.Sprintf("--env=CONTAINERID=%s %s", c.Name(), r.config.KernelArgs),
 		Drives: []fcmodels.Drive{
@@ -270,11 +274,17 @@ func (r *runtimeFC) startVM(c *Container) error {
 		DisableValidation: true,
 	}
 
-	r.ctx, r.vmmCancel = context.WithCancel(context.Background())
+	f, err := os.OpenFile("/home/rgo/boot_times.txt", os.O_RDWR|os.O_APPEND|os.O_CREATE, 0755)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
 
+	r.ctx, r.vmmCancel = context.WithCancel(context.Background())
 	cmdBuilder := firecracker.VMCommandBuilder{}.
 		WithBin(r.config.FirecrackerBinaryPath).
-		WithSocketPath(r.config.SocketPath).
+		WithSocketPath(socket).
+		WithStdout(f).
 		Build(r.ctx)
 
 	var errMach error
@@ -297,7 +307,7 @@ func (r *runtimeFC) startVM(c *Container) error {
 		return err
 	}
 
-	return r.waitVMM(fcTimeout)
+	return r.waitVMM(c, fcTimeout)
 }
 
 // StartContainer starts a container.
