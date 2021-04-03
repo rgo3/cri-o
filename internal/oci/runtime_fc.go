@@ -141,7 +141,7 @@ func (r *runtimeFC) Version() (string, error) {
 func (r *runtimeFC) newFireClient(c *Container) *fclient.Firecracker {
 	httpClient := fclient.NewHTTPClient(strfmt.NewFormats())
 
-	socketFile := fmt.Sprintf("%s-%s", c.Name(), "firecracker.socket")
+	socketFile := fmt.Sprintf("%s-%s", c.ID(), "firecracker.socket")
 
 	socketTransport := &http.Transport{
 		DialContext: func(ctx context.Context, network, path string) (net.Conn, error) {
@@ -241,7 +241,7 @@ func (r *runtimeFC) startVM(c *Container) error {
 		return err
 	}
 
-	socketFile := fmt.Sprintf("%s-%s", c.Name(), "firecracker.socket")
+	socketFile := fmt.Sprintf("%s-%s", c.ID(), "firecracker.socket")
 	socket := filepath.Join(r.config.SocketPath, socketFile)
 
 	fcCfg := firecracker.Config{
@@ -274,7 +274,9 @@ func (r *runtimeFC) startVM(c *Container) error {
 		DisableValidation: true,
 	}
 
-	f, err := os.OpenFile("/home/rgo/boot_times.txt", os.O_RDWR|os.O_APPEND|os.O_CREATE, 0755)
+	filename := fmt.Sprintf("%s-boot.txt", c.Name())
+	path := filepath.Join("/home/rgo/boot-times/", filename)
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0755)
 	if err != nil {
 		return err
 	}
@@ -411,7 +413,7 @@ func (r *runtimeFC) DeleteContainer(c *Container) error {
 }
 
 func (r *runtimeFC) fcCleanup(c *Container) error {
-	socketFile := fmt.Sprintf("%s-%s", c.Name(), "firecracker.socket")
+	socketFile := fmt.Sprintf("%s-%s", c.ID(), "firecracker.socket")
 	socket := filepath.Join(r.config.SocketPath, socketFile)
 	logrus.Infof("Cleaning up firecracker socket %s", socket)
 
