@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -241,6 +242,10 @@ func (r *runtimeFC) startVM(c *Container) error {
 		return err
 	}
 
+	if strings.Contains(strings.ToLower(c.Name()), "pod") {
+		return nil
+	}
+
 	socketFile := fmt.Sprintf("%s-%s", c.ID(), "firecracker.socket")
 	socket := filepath.Join(r.config.SocketPath, socketFile)
 
@@ -390,6 +395,10 @@ func (r *runtimeFC) DeleteContainer(c *Container) error {
 	err := r.fcCleanup(c)
 	if err != nil {
 		return err
+	}
+
+	if strings.Contains(strings.ToLower(c.Name()), "pod") {
+		return nil
 	}
 
 	if err := r.remove(r.ctx, c.ID(), ""); err != nil {
